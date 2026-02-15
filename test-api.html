@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Test</title>
+<style>body{font-family:monospace;background:#111;color:#eee;padding:20px;font-size:13px}
+input{width:100%;padding:10px;margin:8px 0;background:#222;border:1px solid #444;color:#eee;border-radius:6px;font-size:13px}
+button{padding:10px 20px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin:4px}
+pre{background:#1a1a2e;padding:12px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0;border:1px solid #333}
+.ok{color:#10b981}.err{color:#ef4444}.warn{color:#f59e0b}
+</style></head><body>
+<h2>🔧 Finnhub API Tester</h2>
+<input id="key" placeholder="Cola a tua Finnhub API Key" />
+<div>
+<button onclick="testAll()">Testar Tudo</button>
+<button onclick="testQuote()">Quote AAPL</button>
+<button onclick="testCandle()">Candles AAPL</button>
+<button onclick="testForex()">Forex EUR/USD</button>
+<button onclick="testCrypto()">Crypto BTC</button>
+</div>
+<div id="log"></div>
+<script>
+function log(msg, cls) {
+  document.getElementById('log').innerHTML += '<div class="' + (cls||'') + '">' + msg + '</div>';
+}
+function logPre(data) {
+  document.getElementById('log').innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+}
+
+async function fetchAPI(url, label) {
+var k = document.getElementById(‘key’).value.trim();
+if (!k) { log(‘❌ Introduz a API key!’, ‘err’); return null; }
+var full = url + (url.includes(’?’) ? ‘&’ : ‘?’) + ‘token=’ + k;
+log(’<br>📡 <b>’ + label + ‘</b>’, ‘warn’);
+log(’URL: ’ + full.replace(k, ‘KEY***’));
+try {
+var r = await fetch(full);
+log(’Status: ’ + r.status + ’ ’ + r.statusText, r.ok ? ‘ok’ : ‘err’);
+if (!r.ok) {
+var text = await r.text();
+log(’Response: ’ + text, ‘err’);
+return null;
+}
+var data = await r.json();
+logPre(data);
+return data;
+} catch(e) {
+log(’❌ Fetch error: ’ + e.message, ‘err’);
+return null;
+}
+}
+
+async function testQuote() {
+document.getElementById(‘log’).innerHTML = ‘’;
+await fetchAPI(‘https://finnhub.io/api/v1/quote?symbol=AAPL’, ‘Quote AAPL’);
+}
+
+async function testCandle() {
+document.getElementById(‘log’).innerHTML = ‘’;
+var to = Math.floor(Date.now()/1000);
+var from = to - 200*86400;
+await fetchAPI(‘https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=’ + from + ‘&to=’ + to, ‘Stock Candles AAPL (200 days)’);
+}
+
+async function testForex() {
+document.getElementById(‘log’).innerHTML = ‘’;
+var to = Math.floor(Date.now()/1000);
+var from = to - 200*86400;
+await fetchAPI(‘https://finnhub.io/api/v1/forex/candle?symbol=OANDA:EUR_USD&resolution=D&from=’ + from + ‘&to=’ + to, ‘Forex Candles EUR/USD’);
+}
+
+async function testCrypto() {
+document.getElementById(‘log’).innerHTML = ‘’;
+var to = Math.floor(Date.now()/1000);
+var from = to - 200*86400;
+await fetchAPI(‘https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:BTCUSDT&resolution=D&from=’ + from + ‘&to=’ + to, ‘Crypto Candles BTC’);
+}
+
+async function testAll() {
+document.getElementById(‘log’).innerHTML = ‘’;
+log(‘🚀 A testar todos os endpoints…’);
+await fetchAPI(‘https://finnhub.io/api/v1/quote?symbol=AAPL’, ‘1. Quote AAPL’);
+var to = Math.floor(Date.now()/1000);
+var from = to - 30*86400;
+await fetchAPI(‘https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=’ + from + ‘&to=’ + to, ‘2. Stock Candles AAPL (30 days)’);
+await fetchAPI(‘https://finnhub.io/api/v1/forex/candle?symbol=OANDA:EUR_USD&resolution=D&from=’ + from + ‘&to=’ + to, ‘3. Forex EUR/USD (30 days)’);
+await fetchAPI(‘https://finnhub.io/api/v1/crypto/candle?symbol=BINANCE:BTCUSDT&resolution=D&from=’ + from + ‘&to=’ + to, ‘4. Crypto BTC (30 days)’);
+log(’<br>✅ Testes completos!’, ‘ok’);
+}
+</script></body></html>
