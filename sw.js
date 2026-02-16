@@ -1,40 +1,55 @@
-const CACHE = 'cfd-v1';
-const ASSETS = ['./', './index.html', './manifest.json'];
+var CACHE = ‘cfd-v3’;
+var FILES = [
+‘./’,
+‘./index.html’,
+‘./manifest.json’,
+‘./icon192.png’,
+‘./icon512.png’
+];
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
+self.addEventListener(‘install’, function(e) {
+e.waitUntil(
+caches.open(CACHE).then(function(cache) {
+return cache.addAll(FILES);
+}).then(function() {
+return self.skipWaiting();
+})
+);
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
+self.addEventListener(‘activate’, function(e) {
+e.waitUntil(
+caches.keys().then(function(names) {
+return Promise.all(
+names.filter(function(n) { return n !== CACHE; }).map(function(n) { return caches.delete(n); })
+);
+}).then(function() {
+return self.clients.claim();
+})
+);
 });
 
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  // Don't cache API calls
-  if (url.hostname === 'finnhub.io') return;
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-      const clone = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, clone));
-      return res;
-    }))
-  );
-});
+self.addEventListener(‘fetch’, function(e) {
+var url = e.request.url;
 
-// Handle notification from main thread
-self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'notif') {
-    self.registration.showNotification(e.data.title, {
-      body: e.data.body,
-      icon: './icon-192.png',
-      badge: './icon-192.png',
-      tag: e.data.tag || 'cfd',
-      renotify: true
-    });
-  }
+// Always go to network for API calls
+if (url.indexOf(‘finnhub.io’) >= 0 || url.indexOf(‘googleapis.com’) >= 0) {
+e.respondWith(fetch(e.request));
+return;
+}
+
+// Cache-first for app files
+e.respondWith(
+caches.match(e.request).then(function(cached) {
+return cached || fetch(e.request).then(function(resp) {
+if (resp.ok) {
+var clone = resp.clone();
+caches.open(CACHE).then(function(cache) { cache.put(e.request, clone); });
+}
+return resp;
+});
+}).catch(function() {
+return caches.match(’./index.html’);
+})
+);
 });
