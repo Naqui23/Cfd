@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API Test</title>
+<style>body{font-family:-apple-system,sans-serif;background:#111;color:#eee;padding:20px;font-size:14px}
+input{width:100%;padding:14px;background:#222;border:2px solid #444;color:#fff;border-radius:10px;font-size:16px;margin:10px 0;outline:none;-webkit-appearance:none}
+button{width:100%;padding:14px;background:#6366f1;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;margin:6px 0;cursor:pointer}
+#out{background:#1a1a2e;padding:14px;border-radius:10px;margin-top:14px;white-space:pre-wrap;word-break:break-all;font-size:12px;font-family:monospace;line-height:1.6;min-height:100px}
+.ok{color:#10b981}.err{color:#ef4444}.warn{color:#f59e0b}
+</style></head>
+<body>
+<h2>🔧 Teste API Finnhub</h2>
+<p style="font-size:12px;color:#888">Cola a key e toca Testar</p>
+<input type="text" id="k" placeholder="API Key aqui..." autocomplete="off">
+<button onclick="runTest()">🚀 Testar</button>
+<div id="out">A aguardar...</div>
+<script>
+function log(msg,cls){document.getElementById('out').innerHTML+='<span class="'+(cls||'')+'">'+msg+'</span>\n';}
+async function runTest(){
+  var k=document.getElementById('k').value.trim();
+  document.getElementById('out').innerHTML='';
+  if(!k){log('❌ Mete a key!','err');return;}
+  log('Key: '+k.substring(0,4)+'***'+k.slice(-4));
+  log('');
+
+// Test 1: Quote
+log(‘━━━ Teste 1: Quote AAPL ━━━’,‘warn’);
+try{
+var u1=‘https://finnhub.io/api/v1/quote?symbol=AAPL&token=’+k;
+log(‘URL: …quote?symbol=AAPL&token=***’);
+var r1=await fetch(u1);
+log(’HTTP: ‘+r1.status+’ ’+r1.statusText,r1.ok?‘ok’:‘err’);
+var t1=await r1.text();
+log(’Resp: ’+t1.substring(0,300));
+if(r1.ok){var j1=JSON.parse(t1);log(‘Preço: $’+j1.c,‘ok’);}
+}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
+log(’’);
+
+// Test 2: Candles
+log(‘━━━ Teste 2: Candles AAPL (30d) ━━━’,‘warn’);
+try{
+var now=Math.floor(Date.now()/1000);
+var ago=now-2592000;
+var u2=‘https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=’+ago+’&to=’+now+’&token=’+k;
+log(‘URL: …stock/candle?symbol=AAPL&…’);
+var r2=await fetch(u2);
+log(’HTTP: ‘+r2.status+’ ’+r2.statusText,r2.ok?‘ok’:‘err’);
+var t2=await r2.text();
+log(‘Tamanho: ‘+t2.length+’ chars’);
+if(r2.ok){var j2=JSON.parse(t2);
+if(j2.c&&j2.c.length){log(‘✅ ‘+j2.c.length+’ velas recebidas!’,‘ok’);log(‘Último fecho: $’+j2.c[j2.c.length-1],‘ok’);}
+else{log(’⚠️ Resposta: ’+t2.substring(0,200),‘warn’);}}
+}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
+log(’’);
+
+// Test 3: Forex
+log(‘━━━ Teste 3: Forex EUR/USD ━━━’,‘warn’);
+try{
+var u3=‘https://finnhub.io/api/v1/forex/candle?symbol=OANDA:EUR_USD&resolution=D&from=’+ago+’&to=’+now+’&token=’+k;
+var r3=await fetch(u3);
+log(’HTTP: ’+r3.status,r3.ok?‘ok’:‘err’);
+var t3=await r3.text();
+if(r3.ok){var j3=JSON.parse(t3);log(j3.c?‘✅ ‘+j3.c.length+’ velas’:’⚠️ ’+t3.substring(0,100),j3.c?‘ok’:‘warn’);}
+}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
+log(’’);
+log(‘━━━ FIM ━━━’,‘warn’);
+}
+</script>
+
+</body></html>
