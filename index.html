@@ -117,6 +117,26 @@ line-height: 1.7;
 display: none;
 text-align: left;
 }
+.debug-log {
+margin-top: 10px;
+padding: 10px 14px;
+background: #0d1117;
+border: 1px solid #1e2a3a;
+border-radius: 10px;
+font-size: 9px;
+color: #8b9ab5;
+line-height: 1.8;
+max-height: 260px;
+overflow-y: auto;
+display: none;
+text-align: left;
+word-break: break-all;
+white-space: pre-wrap;
+}
+.debug-log .ok { color: #00e68a; }
+.debug-log .err { color: #ff4757; }
+.debug-log .warn { color: #ffbe0b; }
+.debug-log .info { color: #5b7fff; }
 
 .hint {
 color: var(–t3);
@@ -632,7 +652,9 @@ line-height: 1.7;
   <div class="subtitle">Análise técnica profissional · Sinais automáticos · Multi-ativo</div>
   <input class="key-input" type="text" id="keyInput" placeholder="Cola a tua Finnhub API Key" autocomplete="off" spellcheck="false">
   <button class="enter-btn" id="enterBtn" onclick="validateAndEnter()">Entrar</button>
+  <button class="enter-btn" id="debugBtn" onclick="debugTest()" style="margin-top:8px;background:linear-gradient(135deg,#ffbe0b,#f59e0b);font-size:12px">🔧 Diagnóstico da Key</button>
   <div class="error-box" id="errorBox"></div>
+  <div class="debug-log" id="debugLog"></div>
   <div class="hint">
     Cria grátis em <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a><br>
     60 req/min · 100% grátis · 🔒 Key guardada só no teu dispositivo
@@ -861,7 +883,6 @@ function showToast(title, body) {
    ═══════════════════════════════════════════════════ */
 async function validateAndEnter() {
   var key = document.getElementById('keyInput').value.trim();
-  var errBox = document.getElementById('errorBox');
   var btn = document.getElementById('enterBtn');
 
   if (!key) {
@@ -871,75 +892,198 @@ async function validateAndEnter() {
 
   btn.textContent = 'A validar...';
   btn.disabled = true;
+  hideDebug();
 
   try {
-    var resp = await fetch('https://finnhub.io/api/v1/quote?symbol=AAPL&token=' + key);
+    var url = 'https://finnhub.io/api/v1/quote?symbol=AAPL&token=' + encodeURIComponent(key);
+    var resp = await fetch(url);
+    var rawText = await resp.text();
+    var data = null;
 
+    try { data = JSON.parse(rawText); } catch (e) {}
+
+    // Check for error responses from Finnhub
     if (resp.status === 401 || resp.status === 403) {
-      showError('❌ Key inválida ou expirada. Verifica no teu dashboard do Finnhub.');
-      btn.textContent = 'Entrar';
-      btn.disabled = false;
+      showError('❌ Key inválida (HTTP ' + resp.status + '). Verifica no dashboard do Finnhub.');
+      btn.textContent = 'Entrar'; btn.disabled = false;
       return;
     }
 
     if (resp.status === 429) {
-      showError('⚠️ Limite de pedidos atingido. Espera 1 minuto e tenta de novo.');
-      btn.textContent = 'Entrar';
-      btn.disabled = false;
+      showError('⚠️ Limite de 60 req/min atingido. Espera 1 minuto.');
+      btn.textContent = 'Entrar'; btn.disabled = false;
+      return;
+    }
+
+    // Finnhub sometimes returns {"error":"..."} with status 200
+    if (data && data.error) {
+      showError('❌ Finnhub: ' + data.error);
+      btn.textContent = 'Entrar'; btn.disabled = false;
       return;
     }
 
     if (!resp.ok) {
-      showError('Erro HTTP ' + resp.status + '. Tenta de novo.');
-      btn.textContent = 'Entrar';
-      btn.disabled = false;
+      showError('Erro HTTP ' + resp.status + ': ' + rawText.substring(0, 100));
+      btn.textContent = 'Entrar'; btn.disabled = false;
       return;
     }
 
-    var data = await resp.json();
-
+    // Valid key with data
     if (data && typeof data.c === 'number' && data.c > 0) {
-      // Success!
-      API_KEY = key;
-      try { localStorage.setItem('cfd_key', key); } catch (e) {}
-      document.getElementById('setupScreen').style.display = 'none';
-      document.getElementById('dashboard').classList.add('active');
-      renderAssetGrid();
-      refresh();
-    } else if (data && data.c === 0 && data.h === 0) {
-      // Might be weekend/market closed - still valid key
-      showError('⚠️ API respondeu mas sem dados de preço (mercado fechado?). A tentar com outro símbolo...', 'warn');
-      // Try a crypto that trades 24/7
-      var resp2 = await fetch('https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token=' + key);
-      if (resp2.ok) {
+      enterApp(key);
+      return;
+    }
+
+    // Key seems valid but no price (market closed?) - try crypto
+    if (data && data.c === 0) {
+      try {
+        var resp2 = await fetch('https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token=' + encodeURIComponent(key));
         var data2 = await resp2.json();
-        if (data2 && data2.c > 0) {
-          API_KEY = key;
-          try { localStorage.setItem('cfd_key', key); } catch (e) {}
-          document.getElementById('setupScreen').style.display = 'none';
-          document.getElementById('dashboard').classList.add('active');
-          renderAssetGrid();
-          refresh();
-          return;
-        }
-      }
-      // Even if no price data, the key didn't get 401, so it's probably valid
-      API_KEY = key;
-      try { localStorage.setItem('cfd_key', key); } catch (e) {}
-      document.getElementById('setupScreen').style.display = 'none';
-      document.getElementById('dashboard').classList.add('active');
-      renderAssetGrid();
-      refresh();
-    } else {
-      showError('Resposta inesperada: ' + JSON.stringify(data).substring(0, 120));
-      btn.textContent = 'Entrar';
-      btn.disabled = false;
+        if (data2 && data2.c > 0) { enterApp(key); return; }
+      } catch (e) {}
+      // Even without price, no error = valid key
+      enterApp(key);
+      return;
+    }
+
+    // If we got here with a 200 response but unexpected data
+    if (resp.ok) {
+      // Probably valid key, just no data right now
+      enterApp(key);
+      return;
+    }
+
+    showError('Resposta inesperada: ' + rawText.substring(0, 150));
+    btn.textContent = 'Entrar'; btn.disabled = false;
+
+  } catch (e) {
+    showError('Erro de rede: ' + e.message + '. Verifica a ligação à internet e tenta de novo.');
+    btn.textContent = 'Entrar'; btn.disabled = false;
+  }
+}
+
+function enterApp(key) {
+  API_KEY = key;
+  try { localStorage.setItem('cfd_key', key); } catch (e) {}
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('dashboard').classList.add('active');
+  renderAssetGrid();
+  refresh();
+}
+
+// ═══ FULL DIAGNOSTIC TEST ═══
+async function debugTest() {
+  var key = document.getElementById('keyInput').value.trim();
+  var log = document.getElementById('debugLog');
+  log.style.display = 'block';
+  log.innerHTML = '';
+
+  function w(msg, cls) {
+    log.innerHTML += '<span class="' + (cls || '') + '">' + msg + '</span>\n';
+    log.scrollTop = log.scrollHeight;
+  }
+
+  if (!key) { w('❌ Introduz a key primeiro!', 'err'); return; }
+
+  w('═══ DIAGNÓSTICO CFD ANALYZER ═══', 'info');
+  w('📅 ' + new Date().toISOString());
+  w('🔑 Key: ' + key.substring(0, 8) + '...' + key.slice(-4) + ' (' + key.length + ' chars)');
+  w('🌐 UA: ' + navigator.userAgent.substring(0, 70));
+  w('📍 Origem: ' + location.origin);
+  w('');
+
+  // Test 1: Basic connectivity
+  w('━━━ TESTE 1: Conectividade ━━━', 'warn');
+  try {
+    var t0 = Date.now();
+    var r1 = await fetch('https://finnhub.io/api/v1/quote?symbol=AAPL&token=' + encodeURIComponent(key));
+    var t1 = Date.now() - t0;
+    w('Status: ' + r1.status + ' ' + r1.statusText + ' (' + t1 + 'ms)', r1.ok ? 'ok' : 'err');
+    
+    // Show headers
+    var ct = r1.headers.get('content-type');
+    var rl = r1.headers.get('x-ratelimit-remaining');
+    if (ct) w('Content-Type: ' + ct);
+    if (rl) w('Rate-Limit restante: ' + rl);
+
+    var raw = await r1.text();
+    w('Resposta raw: ' + raw.substring(0, 300), raw.indexOf('error') >= 0 ? 'err' : 'ok');
+
+    try {
+      var j = JSON.parse(raw);
+      if (j.error) w('⚠️ ERRO da API: ' + j.error, 'err');
+      else if (j.c > 0) w('✅ AAPL preço: $' + j.c + ' ← KEY FUNCIONA!', 'ok');
+      else if (j.c === 0) w('⚠️ Preço $0 — mercado provavelmente fechado', 'warn');
+      else w('Dados: ' + JSON.stringify(j), 'warn');
+    } catch (e) {
+      w('Não é JSON: ' + e.message, 'err');
     }
   } catch (e) {
-    showError('Erro de rede: ' + e.message + '. Verifica a tua ligação à internet.');
-    btn.textContent = 'Entrar';
-    btn.disabled = false;
+    w('❌ FETCH FALHOU: ' + e.message, 'err');
+    w('Isto indica problema de rede, CORS ou DNS', 'err');
   }
+
+  w('');
+
+  // Test 2: Crypto (trades 24/7)
+  w('━━━ TESTE 2: Crypto BTC (24/7) ━━━', 'warn');
+  try {
+    var r2 = await fetch('https://finnhub.io/api/v1/quote?symbol=BINANCE:BTCUSDT&token=' + encodeURIComponent(key));
+    w('Status: ' + r2.status, r2.ok ? 'ok' : 'err');
+    var raw2 = await r2.text();
+    w('Resposta: ' + raw2.substring(0, 200), 'info');
+    try {
+      var j2 = JSON.parse(raw2);
+      if (j2.error) w('⚠️ Erro: ' + j2.error, 'err');
+      else if (j2.c > 0) w('✅ BTC preço: $' + j2.c, 'ok');
+      else w('Sem preço', 'warn');
+    } catch (e) {}
+  } catch (e) {
+    w('❌ Falhou: ' + e.message, 'err');
+  }
+
+  w('');
+
+  // Test 3: Candles (the actual data we need)
+  w('━━━ TESTE 3: Candles AAPL ━━━', 'warn');
+  try {
+    var now = Math.floor(Date.now() / 1000);
+    var from = now - 30 * 86400;
+    var r3 = await fetch('https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=' + from + '&to=' + now + '&token=' + encodeURIComponent(key));
+    w('Status: ' + r3.status, r3.ok ? 'ok' : 'err');
+    var raw3 = await r3.text();
+    w('Tamanho: ' + raw3.length + ' bytes');
+    try {
+      var j3 = JSON.parse(raw3);
+      if (j3.error) w('⚠️ Erro: ' + j3.error, 'err');
+      else if (j3.s === 'no_data') w('⚠️ Sem dados (no_data)', 'warn');
+      else if (j3.c && j3.c.length) w('✅ ' + j3.c.length + ' velas! Último: $' + j3.c[j3.c.length - 1], 'ok');
+      else w('Dados: ' + raw3.substring(0, 150), 'warn');
+    } catch (e) {}
+  } catch (e) {
+    w('❌ Falhou: ' + e.message, 'err');
+  }
+
+  w('');
+
+  // Test 4: Forex
+  w('━━━ TESTE 4: Forex EUR/USD ━━━', 'warn');
+  try {
+    var r4 = await fetch('https://finnhub.io/api/v1/quote?symbol=OANDA:EUR_USD&token=' + encodeURIComponent(key));
+    w('Status: ' + r4.status, r4.ok ? 'ok' : 'err');
+    var raw4 = await r4.text();
+    w('Resposta: ' + raw4.substring(0, 200), 'info');
+  } catch (e) {
+    w('❌ Falhou: ' + e.message, 'err');
+  }
+
+  w('');
+  w('━━━ DIAGNÓSTICO COMPLETO ━━━', 'warn');
+  w('Copia este log e partilha para debug.', 'info');
+}
+
+function hideDebug() {
+  document.getElementById('debugLog').style.display = 'none';
 }
 
 function showError(msg, type) {
@@ -960,14 +1104,20 @@ function showError(msg, type) {
    ═══════════════════════════════════════════════════ */
 async function apiCall(endpoint, params) {
   params = params || {};
-  var url = new URL('https://finnhub.io/api/v1' + endpoint);
-  url.searchParams.set('token', API_KEY);
-  for (var k in params) url.searchParams.set(k, params[k]);
+  var url = 'https://finnhub.io/api/v1' + endpoint + '?token=' + encodeURIComponent(API_KEY);
+  for (var k in params) url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
 
   try {
-    var resp = await fetch(url.toString());
+    var resp = await fetch(url);
     if (!resp.ok) return null;
-    return await resp.json();
+    var text = await resp.text();
+    try {
+      var data = JSON.parse(text);
+      if (data && data.error) return null;
+      return data;
+    } catch (e) {
+      return null;
+    }
   } catch (e) {
     return null;
   }
