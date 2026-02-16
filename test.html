@@ -1,70 +1,82 @@
 <!DOCTYPE html>
 
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>API Test</title>
-<style>body{font-family:-apple-system,sans-serif;background:#111;color:#eee;padding:20px;font-size:14px}
-input{width:100%;padding:14px;background:#222;border:2px solid #444;color:#fff;border-radius:10px;font-size:16px;margin:10px 0;outline:none;-webkit-appearance:none}
-button{width:100%;padding:14px;background:#6366f1;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;margin:6px 0;cursor:pointer}
-#out{background:#1a1a2e;padding:14px;border-radius:10px;margin-top:14px;white-space:pre-wrap;word-break:break-all;font-size:12px;font-family:monospace;line-height:1.6;min-height:100px}
+<title>API Auto-Test</title>
+<style>body{font-family:-apple-system,sans-serif;background:#111;color:#eee;padding:16px;font-size:13px}
+#out{background:#1a1a2e;padding:12px;border-radius:10px;white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:11px;line-height:1.7;min-height:200px}
 .ok{color:#10b981}.err{color:#ef4444}.warn{color:#f59e0b}
+button{width:100%;padding:14px;background:#6366f1;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;margin:8px 0;cursor:pointer}
+input{width:100%;padding:12px;background:#222;border:2px solid #444;color:#fff;border-radius:10px;font-size:16px;margin:6px 0;outline:none}
 </style></head>
 <body>
-<h2>🔧 Teste API Finnhub</h2>
-<p style="font-size:12px;color:#888">Cola a key e toca Testar</p>
-<input type="text" id="k" placeholder="API Key aqui..." autocomplete="off">
-<button onclick="runTest()">🚀 Testar</button>
-<div id="out">A aguardar...</div>
+<h2>🔧 Auto-Teste v2</h2>
+<input type="text" id="k" placeholder="Key (ou deixa vazio para usar a guardada)">
+<button onclick="go()">🚀 Testar Agora</button>
+<button onclick="goHard()" style="background:#f59e0b">⚡ Testar com key sandbox</button>
+<div id="out">Toca num botão ↑</div>
 <script>
-function log(msg,cls){document.getElementById('out').innerHTML+='<span class="'+(cls||'')+'">'+msg+'</span>\n';}
-async function runTest(){
-  var k=document.getElementById('k').value.trim();
-  document.getElementById('out').innerHTML='';
-  if(!k){log('❌ Mete a key!','err');return;}
-  log('Key: '+k.substring(0,4)+'***'+k.slice(-4));
-  log('');
+var O=document.getElementById('out');
+function w(m,c){O.innerHTML+='<span class="'+(c||'')+'">'+m+'</span>\n';O.scrollTop=O.scrollHeight;}
 
-// Test 1: Quote
-log(‘━━━ Teste 1: Quote AAPL ━━━’,‘warn’);
-try{
-var u1=‘https://finnhub.io/api/v1/quote?symbol=AAPL&token=’+k;
-log(‘URL: …quote?symbol=AAPL&token=***’);
-var r1=await fetch(u1);
-log(’HTTP: ‘+r1.status+’ ’+r1.statusText,r1.ok?‘ok’:‘err’);
-var t1=await r1.text();
-log(’Resp: ’+t1.substring(0,300));
-if(r1.ok){var j1=JSON.parse(t1);log(‘Preço: $’+j1.c,‘ok’);}
-}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
-log(’’);
+async function test(key){
+O.innerHTML=’’;
+w(‘🔑 Key: ‘+key.substring(0,6)+’…’+key.slice(-4)+’ (’+key.length+’ chars)’);
+w(’📅 ’+new Date().toISOString());
+w(‘🌐 UserAgent: ‘+navigator.userAgent.substring(0,80));
+w(’’);
 
-// Test 2: Candles
-log(‘━━━ Teste 2: Candles AAPL (30d) ━━━’,‘warn’);
-try{
 var now=Math.floor(Date.now()/1000);
 var ago=now-2592000;
-var u2=‘https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=’+ago+’&to=’+now+’&token=’+k;
-log(‘URL: …stock/candle?symbol=AAPL&…’);
-var r2=await fetch(u2);
-log(’HTTP: ‘+r2.status+’ ’+r2.statusText,r2.ok?‘ok’:‘err’);
-var t2=await r2.text();
-log(‘Tamanho: ‘+t2.length+’ chars’);
-if(r2.ok){var j2=JSON.parse(t2);
-if(j2.c&&j2.c.length){log(‘✅ ‘+j2.c.length+’ velas recebidas!’,‘ok’);log(‘Último fecho: $’+j2.c[j2.c.length-1],‘ok’);}
-else{log(’⚠️ Resposta: ’+t2.substring(0,200),‘warn’);}}
-}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
-log(’’);
 
-// Test 3: Forex
-log(‘━━━ Teste 3: Forex EUR/USD ━━━’,‘warn’);
+w(‘━━━ 1. fetch() test ━━━’,‘warn’);
 try{
-var u3=‘https://finnhub.io/api/v1/forex/candle?symbol=OANDA:EUR_USD&resolution=D&from=’+ago+’&to=’+now+’&token=’+k;
-var r3=await fetch(u3);
-log(’HTTP: ’+r3.status,r3.ok?‘ok’:‘err’);
-var t3=await r3.text();
-if(r3.ok){var j3=JSON.parse(t3);log(j3.c?‘✅ ‘+j3.c.length+’ velas’:’⚠️ ’+t3.substring(0,100),j3.c?‘ok’:‘warn’);}
-}catch(e){log(‘ERRO: ‘+e.message,‘err’);}
-log(’’);
-log(‘━━━ FIM ━━━’,‘warn’);
+w(‘Fetching…’);
+var r=await fetch(‘https://finnhub.io/api/v1/quote?symbol=AAPL&token=’+key);
+w(’✅ fetch worked! Status: ’+r.status,‘ok’);
+var txt=await r.text();
+w(’Response: ’+txt);
+try{var j=JSON.parse(txt);w(‘AAPL Price: $’+j.c,‘ok’);}catch(e){w(’Parse error: ’+e.message,‘err’);}
+}catch(e){
+w(‘❌ fetch FAILED: ‘+e.message,‘err’);
+w(’’);
+w(‘Trying XMLHttpRequest…’,‘warn’);
+try{
+var xhr=new XMLHttpRequest();
+xhr.open(‘GET’,‘https://finnhub.io/api/v1/quote?symbol=AAPL&token=’+key,false);
+xhr.send();
+w(’XHR Status: ’+xhr.status);
+w(’XHR Response: ’+xhr.responseText);
+}catch(e2){w(‘❌ XHR also failed: ‘+e2.message,‘err’);}
 }
+w(’’);
+
+w(‘━━━ 2. Candles test ━━━’,‘warn’);
+try{
+var r2=await fetch(‘https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=’+ago+’&to=’+now+’&token=’+key);
+w(’Status: ’+r2.status,‘ok’);
+var t2=await r2.text();
+w(‘Size: ‘+t2.length+’ bytes’);
+try{var j2=JSON.parse(t2);w(j2.c?‘✅ ‘+j2.c.length+’ candles! Last: $’+j2.c[j2.c.length-1]:’⚠️ ’+t2.substring(0,100),j2.c?‘ok’:‘warn’);}catch(e){w(’Data: ’+t2.substring(0,150));}
+}catch(e){w(‘❌ ‘+e.message,‘err’);}
+w(’’);
+w(‘━━━ DONE ━━━’,‘warn’);
+}
+
+function go(){
+var k=document.getElementById(‘k’).value.trim();
+if(!k){w(‘Mete a key no campo!’,‘err’);return;}
+// Remove duplicates - if key appears twice
+if(k.length>30){var half=Math.floor(k.length/2);if(k.substring(0,half)===k.substring(half)||k.substring(0,half)===k.substring(half,half*2)){k=k.substring(0,half);w(’⚠️ Key duplicada detectada, usando: ’+k,‘warn’);}}
+test(k);
+}
+
+function goHard(){
+// Use the sandbox key from Finnhub docs
+test(‘sandbox_c0b1234defghijklmn’);
+}
+
+// Auto-detect saved key
+try{var sk=localStorage.getItem(‘cfdk6’)||localStorage.getItem(‘fhk’);if(sk){document.getElementById(‘k’).value=sk;w(‘Key guardada encontrada: ‘+sk.substring(0,6)+’…’,‘ok’);}}catch(e){}
 </script>
 
 </body></html>
