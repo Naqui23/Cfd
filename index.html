@@ -331,8 +331,20 @@ svg{width:100%;height:auto;display:block}
 </div>
 
 <script>
-/* ═══════════════════════════════════════════════════
-   STATE
+/* Global error handler - shows errors on screen */
+window.onerror=function(msg,url,line){
+  var st=document.getElementById('splashStatus');
+  if(st){st.style.display='block';st.style.color='var(--red)';st.textContent='Erro JS: '+msg+' (linha '+line+')';}
+  console.error('CFD Error:',msg,url,line);
+};
+
+/* Force service worker update */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){r.update()});
+  });
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
    ═══════════════════════════════════════════════════ */
 var MODE='acoes'; // 'acoes' | 'cfds'
 var sel='AAPL',showS=true,showB=true,showF=false,autoR=false,autoI=null,notif=false,prevSig={};
@@ -465,22 +477,95 @@ function showToast(t,b){document.getElementById('toastTitle').textContent=t;docu
 /* ═══════════════════════════════════════════════════
    YAHOO FINANCE
    ═══════════════════════════════════════════════════ */
-var PX=[function(u){return 'https://corsproxy.io/?'+encodeURIComponent(u)},function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},function(u){return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)}];
+var PX=[
+  function(u){return 'https://corsproxy.io/?'+encodeURIComponent(u)},
+  function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
+  function(u){return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)},
+  function(u){return 'https://cors-anywhere.herokuapp.com/'+u},
+  function(u){return 'https://thingproxy.freeboard.io/fetch/'+u}
+];
 var wp=-1;
+var splashLog=null; // reference to status element during startup
+
+function logSplash(msg,color){
+  if(splashLog){splashLog.style.color=color||'var(--amber)';splashLog.textContent=msg}
+  console.log('[CFD]',msg);
+}
+
 async function yf(sym,intv,range){
   var base='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym)+'?interval='+intv+'&range='+range+'&includePrePost=false';
-  if(wp===-1){try{var r=await ft(base,6000);if(r.ok){var d=await r.json();var p=pY(d);if(p&&p.length>0)return p}}catch(e){}}
-  for(var i=(wp>=0?wp:0);i<PX.length;i++){try{var r2=await ft(PX[i](base),8000);if(r2.ok){var t=await r2.text();var d2=JSON.parse(t);var p2=pY(d2);if(p2&&p2.length>0){wp=i;return p2}}}catch(e){continue}}
-  if(wp>=0){for(var j=0;j<PX.length;j++){if(j===wp)continue;try{var r3=await ft(PX[j](base),8000);if(r3.ok){var t3=await r3.text();var d3=JSON.parse(t3);var p3=pY(d3);if(p3&&p3.length>0){wp=j;return p3}}}catch(e){continue}}}
+
+  // If we already know a working proxy, try it first
+  if(wp>=0){
+    try{
+      var r=await ft(PX[wp](base),8000);
+      if(r.ok){var t=await r.text();var d=JSON.parse(t);var p=pY(d);if(p&&p.length>0)return p}
+    }catch(e){}
+  }
+
+  // Try direct (usually blocked by CORS from browser)
+  if(wp===-1){
+    try{var r0=await ft(base,5000);if(r0.ok){var d0=await r0.json();var p0=pY(d0);if(p0&&p0.length>0){wp=-1;return p0}}}catch(e){}
+  }
+
+  // Try all proxies
+  for(var i=0;i<PX.length;i++){
+    if(i===wp)continue; // already tried
+    try{
+      logSplash('Proxy '+(i+1)+'/'+PX.length+'...');
+      var r2=await ft(PX[i](base),8000);
+      if(r2.ok){
+        var t2=await r2.text();
+        // Some proxies wrap in JSON
+        var d2;
+        try{d2=JSON.parse(t2)}catch(e){continue}
+        var p2=pY(d2);
+        if(p2&&p2.length>0){wp=i;logSplash('Proxy '+(i+1)+' OK!','var(--green)');return p2}
+      }
+    }catch(e){continue}
+  }
   return null;
 }
-function ft(u,ms){return Promise.race([fetch(u),new Promise(function(_,r){setTimeout(function(){r(new Error('t'))},ms)})])}
+function ft(u,ms){return Promise.race([fetch(u),new Promise(function(_,r){setTimeout(function(){r(new Error('timeout'))},ms)})])}
 function pY(j){try{var r=j.chart.result[0],ts=r.timestamp,q=r.indicators.quote[0];if(!ts||!q.close)return null;var c=[];for(var i=0;i<ts.length;i++){if(q.close[i]==null)continue;c.push({date:new Date(ts[i]*1000).toISOString().split('T')[0],o:q.open[i]||q.close[i],h:q.high[i]||q.close[i],l:q.low[i]||q.close[i],c:q.close[i],v:q.volume?(q.volume[i]||0):0})}return c}catch(e){return null}}
 
 async function startApp(){
-  var st=document.getElementById('splashStatus');st.style.display='block';st.textContent='A conectar ao Yahoo Finance...';
-  try{var d=await yf('AAPL','1d','5d');if(d&&d.length>0){document.getElementById('splashScreen').style.display='none';document.getElementById('dashboard').classList.add('active');initUI();refresh();return}}catch(e){}
-  st.style.color='var(--red)';st.textContent='Erro de ligação. Verifica a internet.';
+  var st=document.getElementById('splashStatus');
+  st.style.display='block';
+  splashLog=st;
+  logSplash('A testar ligação ao Yahoo Finance...');
+
+  try{
+    var d=await yf('AAPL','1d','5d');
+    if(d&&d.length>0){
+      logSplash('Conectado! A carregar...','var(--green)');
+      setTimeout(function(){
+        document.getElementById('splashScreen').style.display='none';
+        document.getElementById('dashboard').classList.add('active');
+        splashLog=null;
+        initUI();refresh();
+      },300);
+      return;
+    }
+    logSplash('Yahoo respondeu mas sem dados. A tentar BTC...','var(--amber)');
+    // Fallback: try crypto (always has data)
+    var d2=await yf('BTC-USD','1d','5d');
+    if(d2&&d2.length>0){
+      logSplash('Conectado via crypto! A carregar...','var(--green)');
+      setTimeout(function(){
+        document.getElementById('splashScreen').style.display='none';
+        document.getElementById('dashboard').classList.add('active');
+        splashLog=null;
+        initUI();refresh();
+      },300);
+      return;
+    }
+  }catch(e){
+    console.error('[CFD] startApp error:',e);
+  }
+  logSplash('Todos os proxies falharam. Verifica a internet ou tenta mais tarde.','var(--red)');
+  // Show retry button
+  st.innerHTML+='<br><button onclick="startApp()" style="margin-top:10px;padding:8px 20px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-family:var(--heading);font-size:12px;cursor:pointer">↻ Tentar de novo</button>';
 }
 
 /* ═══════════════════════════════════════════════════
