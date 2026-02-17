@@ -1,12 +1,14 @@
 {
-  "name": "CFD Analyzer Pro",
-  "short_name": "CFD Pro",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#07090f",
-  "theme_color": "#07090f",
-  "icons": [
-    {"src": "icon192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon512.png", "sizes": "512x512", "type": "image/png"}
-  ]
+“name”: “CFD Analyzer Pro”,
+“short_name”: “CFD Pro”,
+“description”: “Análise técnica profissional com sinais automáticos, backtesting e gestão de risco”,
+“start_url”: “.”,
+“display”: “standalone”,
+“background_color”: “#060b14”,
+“theme_color”: “#060b14”,
+“orientation”: “portrait-primary”,
+“icons”: [
+{ “src”: “icon192.png”, “sizes”: “192x192”, “type”: “image/png” },
+{ “src”: “icon512.png”, “sizes”: “512x512”, “type”: “image/png” }
+]
 }
